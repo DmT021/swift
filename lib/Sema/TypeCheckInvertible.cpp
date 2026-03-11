@@ -136,6 +136,10 @@ static void checkInvertibleConformanceCommon(DeclContext *dc,
   if (nominalDecl->getAttrs().hasAttribute<NonEscapableAttr>())
     inverses.insert(InvertibleProtocolKind::Escapable);
 
+  // ~Discardable implies ~Copyable (Copyable refines Discardable).
+  if (inverses.contains(InvertibleProtocolKind::Discardable))
+    inverses.insert(InvertibleProtocolKind::Copyable);
+
   bool hasExplicitInverse = inverses.contains(ip);
 
   bool hasUnconditionalConformance = conformance.isAbstract();
@@ -264,6 +268,16 @@ static void checkInvertibleConformanceCommon(DeclContext *dc,
         if (type->isEscapable())
           return false;
         break;
+      case InvertibleProtocolKind::Discardable:
+        if (type->isDiscardable())
+          return false;
+        // A ~Discardable stored property may appear inside ~Copyable structs.
+        // TODO: Allow ~Discardable properties in ~Copyable enums once deinitializers
+        // and `discard self` are supported on them.
+        // TODO: Phase 3e: Allow ~Discardable properties in classes and actors.
+        if (isa<StructDecl>(Nominal) && !Nominal->getDeclaredInterfaceType()->isCopyable())
+          return false;
+        break;
       }
 
       storage->diagnose(diag::inverse_type_member_in_conforming_type,
@@ -302,6 +316,12 @@ void swift::checkCopyableConformance(DeclContext *dc,
                                      ProtocolConformanceRef conformance) {
   checkInvertibleConformanceCommon(dc, conformance,
                                    InvertibleProtocolKind::Copyable);
+}
+
+void swift::checkDiscardableConformance(DeclContext *dc,
+                                        ProtocolConformanceRef conformance) {
+  checkInvertibleConformanceCommon(dc, conformance,
+                                   InvertibleProtocolKind::Discardable);
 }
 
 /// Visit the instance storage of the given nominal type as seen through

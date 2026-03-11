@@ -1447,6 +1447,7 @@ namespace decls_block {
     BCFixed<1>,          // has AnyObject constraint
     BCFixed<1>,          // has ~Copyable constraint
     BCFixed<1>,          // has ~Escapable constraint
+    BCFixed<1>,          // has ~Discardable constraint
     BCArray<TypeIDField> // protocols
   );
 

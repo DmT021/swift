@@ -1278,5 +1278,18 @@ ERROR(invalid_multiple_return_borrow_accessor, none,
 ERROR(unsupported_borrow_abstraction, none,
       "cannot witness borrow requirement for result type %0",
       (Type))
+// ~Discardable enforcement
+ERROR(sil_nondiscardable_unconsumed, none,
+      "non-discardable value '%0' must be consumed before it goes out of scope",
+      (StringRef))
+
+ERROR(sil_nondiscardable_unconsumed_in_deinit, none,
+      "non-discardable stored property '%0' must be consumed before deinit exits",
+      (StringRef))
+
+ERROR(sil_nondiscardable_leaked_by_discard_self, none,
+      "non-discardable stored property '%0' was not consumed before 'discard self'",
+      (StringRef))
+
 #define UNDEFINE_DIAGNOSTIC_MACROS
 #include "DefineDiagnosticMacros.h"

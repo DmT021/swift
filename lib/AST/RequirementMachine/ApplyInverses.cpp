@@ -274,6 +274,16 @@ void swift::rewriting::applyInverses(
       return false;
     }
     auto recordedInverses = foundInverses->getSecond();
-    return recordedInverses.contains(*proto);
+    if (recordedInverses.contains(*proto))
+      return true;
+
+    // Copyable refines Discardable, so ~Discardable implies ~Copyable.
+    // If we have recorded ~Discardable for this subject, also cancel
+    // the inferred Copyable conformance.
+    if (*proto == InvertibleProtocolKind::Copyable &&
+        recordedInverses.contains(InvertibleProtocolKind::Discardable))
+      return true;
+
+    return false;
   }), result.end());
 }

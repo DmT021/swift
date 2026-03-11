@@ -453,6 +453,8 @@ ERROR(destructor_decl_outside_class_or_noncopyable,none,
       "deinitializers may only be declared within a class, actor, or noncopyable type", ())
 ERROR(destructor_decl_on_noncopyable_enum,none,
       "deinitializers are not yet supported on noncopyable enums", ())
+ERROR(destructor_decl_on_nondiscardable_type,none,
+      "non-discardable type %0 cannot have a deinit", (DeclName))
 ERROR(expected_lbrace_destructor,PointsToFirstBadToken,
       "expected '{' for deinitializer", ())
 ERROR(destructor_has_name,PointsToFirstBadToken,

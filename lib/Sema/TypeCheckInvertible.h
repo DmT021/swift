@@ -38,6 +38,10 @@ void checkCopyableConformance(DeclContext *dc,
 /// Checks that all stored properties or associated values are Escapable.
 void checkEscapableConformance(DeclContext *dc,
                                ProtocolConformanceRef conformance);
+
+/// Checks that all stored properties or associated values are Discardable.
+void checkDiscardableConformance(DeclContext *dc,
+                                 ProtocolConformanceRef conformance);
 }
 
 

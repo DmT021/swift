@@ -3527,6 +3527,9 @@ bool AbstractStorageDecl::requiresOpaqueSetter() const {
   if (getParsedAccessor(AccessorKind::Mutate)) {
     return false;
   }
+  if (!getValueInterfaceType()->isDiscardable()) {
+    return false;
+  }
   return true;
 }
 
@@ -5761,6 +5764,10 @@ TypeDecl::CanBeInvertible::Result NominalTypeDecl::canBeCopyable() const {
 
 TypeDecl::CanBeInvertible::Result NominalTypeDecl::canBeEscapable() const {
   return canConformTo(InvertibleProtocolKind::Escapable);
+}
+
+TypeDecl::CanBeInvertible::Result NominalTypeDecl::canBeDiscardable() const {
+  return canConformTo(InvertibleProtocolKind::Discardable);
 }
 
 Type TypeDecl::getDeclaredInterfaceType() const {

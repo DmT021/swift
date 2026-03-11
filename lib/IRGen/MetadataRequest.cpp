@@ -1438,6 +1438,15 @@ getFunctionTypeFlags(CanFunctionType type) {
       // already in the normal function type flags. The runtime will
       // introduce it as necessary.
       break;
+
+    case InvertibleProtocolKind::Discardable: {
+      // If the type is non-discardable, note that in the suppressed protocols.
+      auto proto =
+        type->getASTContext().getProtocol(KnownProtocolKind::Discardable);
+      if (proto && lookupConformance(type, proto).isInvalid())
+        InvertedProtocols.insert(invertibleKind);
+      break;
+    }
     }
   }
 

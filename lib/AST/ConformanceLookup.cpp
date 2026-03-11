@@ -389,6 +389,9 @@ static ProtocolConformanceRef getBuiltinFunctionTypeConformance(
       // Functions cannot permanently destroy a move-only var/let
       // that they capture, so it's safe to copy functions, like classes.
       return synthesizeConformance();
+    case KnownProtocolKind::Discardable:
+      // All function types are Discardable.
+      return synthesizeConformance();
     case KnownProtocolKind::BitwiseCopyable:
       if (isBitwiseCopyableFunctionType(functionType))
         return synthesizeConformance();
@@ -462,6 +465,7 @@ static ProtocolConformanceRef getBuiltinMetaTypeTypeConformance(
 
     case KnownProtocolKind::Copyable:
     case KnownProtocolKind::Escapable:
+    case KnownProtocolKind::Discardable:
     case KnownProtocolKind::BitwiseCopyable:
     case KnownProtocolKind::SendableMetatype:
       return ProtocolConformanceRef(
@@ -485,7 +489,8 @@ getBuiltinBuiltinTypeConformance(Type type, const BuiltinType *builtinType,
     case KnownProtocolKind::Sendable:
     case KnownProtocolKind::SendableMetatype:
     case KnownProtocolKind::Copyable:
-    case KnownProtocolKind::Escapable: {
+    case KnownProtocolKind::Escapable:
+    case KnownProtocolKind::Discardable: {
       ASTContext &ctx = protocol->getASTContext();
 
       // FixedArray is Sendable, Copyable, or Escapable if its element type is.
@@ -962,6 +967,14 @@ void TypeBase::computeInvertibleConformances() {
       canType, InvertibleProtocolKind::Copyable);
   Bits.TypeBase.IsEscapable = conformsToInvertible(
       canType, InvertibleProtocolKind::Escapable);
+
+  // Discardable: check direct conformance, then apply refinement rule.
+  // Copyable refines Discardable, so any Copyable type is also Discardable.
+  bool isDiscardable = conformsToInvertible(
+      canType, InvertibleProtocolKind::Discardable);
+  if (!isDiscardable && Bits.TypeBase.IsCopyable)
+    isDiscardable = true;
+  Bits.TypeBase.IsDiscardable = isDiscardable;
 }
 
 /// \returns true iff this type lacks conformance to Copyable.
@@ -989,6 +1002,12 @@ bool TypeBase::isEscapable(GenericSignature sig) {
     contextTy = sig.getGenericEnvironment()->mapTypeIntoEnvironment(contextTy);
   }
   return contextTy->isEscapable();
+}
+
+bool TypeBase::isDiscardable() {
+  if (!Bits.TypeBase.ComputedInvertibleConformances)
+    computeInvertibleConformances();
+  return Bits.TypeBase.IsDiscardable;
 }
 
 bool TypeBase::isBitwiseCopyable() {

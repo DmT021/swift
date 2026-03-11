@@ -4300,6 +4300,13 @@ StorageImplInfoRequest::evaluate(Evaluator &evaluator,
 
   bool hasWillSet = storage->getParsedAccessor(AccessorKind::WillSet);
   bool hasDidSet = storage->getParsedAccessor(AccessorKind::DidSet);
+  if ((hasWillSet || hasDidSet) &&
+      storage->getValueInterfaceType()->isDiscardable() == false) {
+    storage->diagnose(diag::nondiscardable_property_cannot_have_observers,
+                      storage->getName().getBaseName().userFacingName());
+    hasWillSet = false;
+    hasDidSet = false;
+  }
   bool hasCoroutineAccessorFeature =
       storage->getASTContext().LangOpts.hasFeature(Feature::CoroutineAccessors);
   if ((hasWillSet || hasDidSet) && !isa<SubscriptDecl>(storage)) {

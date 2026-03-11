@@ -618,6 +618,17 @@ static bool usesFeatureBorrowingSequence(Decl *decl) {
   return false;
 }
 
+static bool usesFeatureNonDiscardableTypes(Decl *decl) {
+  if (auto *nominal = dyn_cast<NominalTypeDecl>(decl)) {
+    InvertibleProtocolSet inverses;
+    bool anyObject = false;
+    (void)getDirectlyInheritedNominalTypeDecls(nominal, inverses, anyObject);
+    if (inverses.contains(InvertibleProtocolKind::Discardable))
+      return true;
+  }
+  return false;
+}
+
 // ----------------------------------------------------------------------------
 // MARK: - FeatureSet
 // ----------------------------------------------------------------------------

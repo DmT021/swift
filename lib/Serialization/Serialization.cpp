@@ -6280,7 +6280,8 @@ public:
     for (auto proto : composition->getMembers())
       protocols.push_back(S.addTypeRef(proto));
 
-    bool inverseCopyable = false, inverseEscapable = false;
+    bool inverseCopyable = false, inverseEscapable = false,
+         inverseDiscardable = false;
     for (auto ip : composition->getInverses()) {
       switch (ip) {
       case InvertibleProtocolKind::Copyable:
@@ -6288,6 +6289,9 @@ public:
         break;
       case InvertibleProtocolKind::Escapable:
         inverseEscapable = true;
+        break;
+      case InvertibleProtocolKind::Discardable:
+        inverseDiscardable = true;
         break;
       };
     }
@@ -6299,6 +6303,7 @@ public:
         composition->hasExplicitAnyObject(),
         inverseCopyable,
         inverseEscapable,
+        inverseDiscardable,
         protocols);
   }
 

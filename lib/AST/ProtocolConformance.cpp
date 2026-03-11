@@ -1233,6 +1233,10 @@ void NominalTypeDecl::prepareConformanceTable() const {
   if (getAttrs().hasAttribute<NonEscapableAttr>())
     inverses.insert(InvertibleProtocolKind::Escapable);
 
+  // ~Discardable implies ~Copyable (Copyable refines Discardable).
+  if (inverses.contains(InvertibleProtocolKind::Discardable))
+    inverses.insert(InvertibleProtocolKind::Copyable);
+
   bool hasSuppressedConformances = false;
   for (auto ip : InvertibleProtocolSet::allKnown()) {
     if (!inverses.contains(ip) ||

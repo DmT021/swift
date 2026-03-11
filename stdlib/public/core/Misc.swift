@@ -181,6 +181,21 @@ func _rethrowsViaClosure(_ fn: () throws -> ()) rethrows {
   }
 }
 
+/// A type whose values can be implicitly destroyed (discarded) when they
+/// go out of scope.
+///
+/// All Swift types implicitly conform to `Discardable` by default.
+/// Types that suppress their implicit conformance to `Discardable`
+/// (by writing `~Discardable`) represent values that must be explicitly
+/// consumed — they cannot be silently dropped. Such types model
+/// obligations, tokens, or resources where forgetting to handle the
+/// value is a programming error.
+///
+/// Because `Copyable` refines `Discardable`, writing `~Discardable`
+/// automatically implies `~Copyable`. A type cannot be copyable without
+/// being discardable.
+@_marker public protocol Discardable/*: ~Copyable, ~Escapable*/ {}
+
 /// A type whose values can be implicitly or explicitly copied.
 ///
 /// Conforming to this protocol indicates that a type's value can be copied;
@@ -237,7 +252,7 @@ func _rethrowsViaClosure(_ fn: () throws -> ()) rethrows {
 ///     protocol NoRequirements: ~Copyable { }
 ///
 /// Extensions to the `Copyable` protocol are not allowed.
-@_marker public protocol Copyable/*: ~Escapable*/ {}
+@_marker public protocol Copyable: Discardable /*, ~Escapable*/ {}
 
 /// A type whose values can persist beyond their immediate local scope.
 ///
@@ -253,7 +268,7 @@ func _rethrowsViaClosure(_ fn: () throws -> ()) rethrows {
 /// with values that may or may not be Escapable, and types can be conditionally `Escapable` based on their generic
 /// arguments. A conformance requirement for `Escapable` is automatically inferred in extensions and for generic type
 /// parameters, unless suppressed with `~Escapable`.
-@_marker public protocol Escapable/*: ~Copyable*/ {}
+@_marker public protocol Escapable/*: ~Copyable, ~Discardable*/ {}
 
 @_marker public protocol BitwiseCopyable: ~Escapable { }
 

@@ -813,6 +813,9 @@ public:
   /// orWrapped == true  -->  isNoncopyable || isMoveOnlyWrapped
   bool isMoveOnly(bool orWrapped=true) const;
 
+  /// Returns true if this type is non-discardable (~Discardable).
+  bool isNonDiscardable() const;
+
   /// Return true if this is a value type (struct/enum) that requires
   /// deinitialization beyond destruction of its members.
   bool isValueTypeWithDeinit() const;

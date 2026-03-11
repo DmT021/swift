@@ -420,7 +420,7 @@ protected:
   union { uint64_t OpaqueBits;
 
   SWIFT_INLINE_BITFIELD_BASE(TypeBase, NumTypeKindBits +
-                             RecursiveTypeProperties::BitWidth + 1 + 3,
+                             RecursiveTypeProperties::BitWidth + 1 + 4,
     /// Kind - The discriminator that indicates what subclass of type this is.
     Kind : NumTypeKindBits,
 
@@ -431,7 +431,8 @@ protected:
 
     ComputedInvertibleConformances : 1,
     IsCopyable : 1,
-    IsEscapable : 1
+    IsEscapable : 1,
+    IsDiscardable : 1
   );
 
   SWIFT_INLINE_BITFIELD(ErrorType, TypeBase, 1,
@@ -461,11 +462,11 @@ protected:
     NumProtocols : 16
   );
 
-  SWIFT_INLINE_BITFIELD_FULL(TypeVariableType, TypeBase, 7+28,
+  SWIFT_INLINE_BITFIELD_FULL(TypeVariableType, TypeBase, 7+26,
     /// Type variable options.
     Options : 7,
     /// The unique number assigned to this type variable.
-    ID : 27
+    ID : 26
   );
 
   SWIFT_INLINE_BITFIELD_FULL(ErrorUnionType, TypeBase, 32,
@@ -491,7 +492,7 @@ protected:
     Representation : 2
   );
 
-  SWIFT_INLINE_BITFIELD_FULL(ProtocolCompositionType, TypeBase, 1+32,
+  SWIFT_INLINE_BITFIELD_FULL(ProtocolCompositionType, TypeBase, 1+31,
     /// Whether we have an explicitly-stated class constraint not
     /// implied by any of our members.
     HasExplicitAnyObject : 1,
@@ -499,7 +500,7 @@ protected:
     : NumPadBits,
 
     /// The number of protocols being composed.
-    Count : 32
+    Count : 31
   );
 
   SWIFT_INLINE_BITFIELD_FULL(ParameterizedProtocolType, TypeBase, 32,
@@ -521,14 +522,14 @@ protected:
     Count : 32
   );
 
-  SWIFT_INLINE_BITFIELD_FULL(SILPackType, TypeBase, 1+32,
+  SWIFT_INLINE_BITFIELD_FULL(SILPackType, TypeBase, 1+31,
     /// Whether elements of the pack are addresses.
     ElementIsAddress : 1,
 
     : NumPadBits,
 
     /// The number of elements of the pack
-    Count : 32
+    Count : 31
   );
 
   SWIFT_INLINE_BITFIELD_FULL(BoundGenericType, TypeBase, 32,
@@ -538,14 +539,14 @@ protected:
     GenericArgCount : 32
   );
 
-  SWIFT_INLINE_BITFIELD_FULL(TypeAliasType, SugarType, 1+1+30,
+  SWIFT_INLINE_BITFIELD_FULL(TypeAliasType, SugarType, 1+1+29,
     : NumPadBits,
 
     /// Whether we have a parent type.
     HasParent : 1,
 
     /// The number of generic arguments.
-    GenericArgCount : 31
+    GenericArgCount : 30
   );
 
   SWIFT_INLINE_BITFIELD_FULL(IntegerType, TypeBase, 1,
@@ -572,6 +573,7 @@ protected:
     Bits.TypeBase.ComputedInvertibleConformances = false;
     Bits.TypeBase.IsCopyable = false;
     Bits.TypeBase.IsEscapable = false;
+    Bits.TypeBase.IsDiscardable = false;
 
     setRecursiveProperties(properties);
   }
@@ -710,6 +712,9 @@ public:
 
   /// Returns true if this contextual type satisfies a conformance to Escapable.
   bool isEscapable();
+
+  /// Returns true if this contextual type satisfies a conformance to Discardable.
+  bool isDiscardable();
 
   /// Returns true if this type satisfies a conformance to Escapable in the
   /// given generic signature.

@@ -171,6 +171,9 @@ static void addMandatoryDiagnosticOptPipeline(SILPassPipelinePlan &P) {
   // Check noImplicitCopy and move only types for objects and addresses.
   P.addMoveOnlyChecker();
 
+  // Check ~Discardable values are explicitly consumed.
+  P.addNonDiscardableChecker();
+
   // FIXME: rdar://122701694 (`consuming` keyword causes verification error on
   //        invalid SIL types)
   //

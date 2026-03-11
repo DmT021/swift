@@ -1981,6 +1981,11 @@ static std::optional<InvertibleProtocolKind> checkGenericArgsForInvertibleReqs(
       case InvertibleProtocolKind::Escapable:
         if (!arg->isEscapable())
           return ip;
+        break;
+      case InvertibleProtocolKind::Discardable:
+        if (!arg->isDiscardable())
+          return ip;
+        break;
       }
     }
   }
@@ -2012,6 +2017,11 @@ static bool checkInverseGenericsCastingAvailability(Type srcType,
       case InvertibleProtocolKind::Escapable:
         diag =
             diag::availability_escapable_generics_casting_only_version_newer;
+        break;
+      case InvertibleProtocolKind::Discardable:
+        // TODO: Add availability diagnostic for non-discardable generics
+        diag =
+            diag::availability_copyable_generics_casting_only_version_newer;
         break;
       }
 

@@ -4796,6 +4796,16 @@ public:
   /// Type if it `isEscapable` instead of using this.
   CanBeInvertible::Result canBeEscapable() const;
 
+  /// "Does a conformance for Discardable exist for this type declaration?"
+  ///
+  /// This doesn't mean that all instances of this type are Discardable, because
+  /// if a conditional conformance to Discardable exists, this method will return
+  /// true.
+  ///
+  /// If you need a more precise answer, ask this Decl's corresponding
+  /// Type if it `isDiscardable` instead of using this.
+  CanBeInvertible::Result canBeDiscardable() const;
+
   bool suppressesConformance(KnownProtocolKind kp) const;
 
   // Implement isa/cast/dyncast/etc.

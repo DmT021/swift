@@ -5018,6 +5018,9 @@ ERROR(value_of_module_type,none,
 
 ERROR(value_of_metatype_type,none,
       "expected member name or initializer call after type name", ())
+ERROR(nondiscardable_property_cannot_have_observers, none,
+      "non-discardable property '%0' cannot have 'willSet' or 'didSet' observers",
+      (StringRef))
 
 NOTE(add_parens_to_type,none,
      "add arguments after the type to construct a value of the type", ())

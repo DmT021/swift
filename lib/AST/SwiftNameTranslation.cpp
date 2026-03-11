@@ -457,6 +457,9 @@ bool swift::cxx_translation::isExposableToCxx(GenericSignature genericSig) {
 
     case InvertibleProtocolKind::Escapable:
       continue;
+
+    case InvertibleProtocolKind::Discardable:
+      continue;
     }
 
     return false;

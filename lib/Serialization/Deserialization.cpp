@@ -7761,7 +7761,8 @@ DESERIALIZE_TYPE(GENERIC_TYPE_PARAM_TYPE)(
 
 Expected<Type> DESERIALIZE_TYPE(PROTOCOL_COMPOSITION_TYPE)(
     ModuleFile &MF, SmallVectorImpl<uint64_t> &scratch, StringRef blobData) {
-  bool hasExplicitAnyObject, hasInverseCopyable, hasInverseEscapable;
+  bool hasExplicitAnyObject, hasInverseCopyable, hasInverseEscapable,
+       hasInverseDiscardable;
   ArrayRef<uint64_t> rawProtocolIDs;
 
   decls_block::ProtocolCompositionTypeLayout::readRecord(
@@ -7769,6 +7770,7 @@ Expected<Type> DESERIALIZE_TYPE(PROTOCOL_COMPOSITION_TYPE)(
       hasExplicitAnyObject,
       hasInverseCopyable,
       hasInverseEscapable,
+      hasInverseDiscardable,
       rawProtocolIDs);
 
   SmallVector<Type, 4> protocols;
@@ -7784,6 +7786,8 @@ Expected<Type> DESERIALIZE_TYPE(PROTOCOL_COMPOSITION_TYPE)(
     inverses.insert(InvertibleProtocolKind::Copyable);
   if (hasInverseEscapable)
     inverses.insert(InvertibleProtocolKind::Escapable);
+  if (hasInverseDiscardable)
+    inverses.insert(InvertibleProtocolKind::Discardable);
 
   return ProtocolCompositionType::get(MF.getContext(), protocols, inverses,
                                       hasExplicitAnyObject);

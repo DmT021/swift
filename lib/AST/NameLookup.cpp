@@ -3632,6 +3632,7 @@ InheritedProtocolsRequest::evaluate(Evaluator &evaluator,
     case KnownProtocolKind::Sendable:
     case KnownProtocolKind::Copyable:
     case KnownProtocolKind::Escapable:
+    case KnownProtocolKind::Discardable:
       skipInverses = true;
       break;
 

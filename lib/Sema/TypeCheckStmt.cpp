@@ -1326,8 +1326,13 @@ public:
                            diag::discard_wrong_context_copyable);
         diagnosed = true;
 
-      // has to have a deinit or else it's pointless.
-      } else if (!nominalDecl->getValueTypeDestructor()) {
+      // has to have a deinit or else it's pointless — unless it's
+      // ~Discardable, where discard self is the primary way to end self's
+      // lifetime (since ~Discardable types cannot have a deinit).
+      } else if (!nominalDecl->getValueTypeDestructor()
+                 && !(!nominalDecl->canBeDiscardable()
+                      && ctx.LangOpts.hasFeature(
+                             Feature::NonDiscardableTypes))) {
         ctx.Diags.diagnose(DS->getDiscardLoc(),
                            diag::discard_no_deinit,
                            nominalType)

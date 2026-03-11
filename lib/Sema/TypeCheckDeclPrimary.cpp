@@ -4082,6 +4082,14 @@ public:
           && !nom->canBeCopyable()) {
         DD->diagnose(diag::destructor_decl_on_noncopyable_enum);
       }
+
+      // Ban deinit on ~Discardable types
+      if (Ctx.LangOpts.hasFeature(Feature::NonDiscardableTypes)
+          && !nom->canBeDiscardable()
+          && isa<StructDecl, EnumDecl>(nom)) {
+        DD->diagnose(diag::destructor_decl_on_nondiscardable_type,
+                     nom->getName());
+      }
     }
 
     TypeChecker::checkDeclAttributes(DD);

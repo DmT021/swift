@@ -2460,6 +2460,7 @@ RValue SILGenFunction::emitAnyHashableErasure(SILLocation loc,
         return conformance;
       case KnownProtocolKind::Copyable:
       case KnownProtocolKind::Escapable:
+      case KnownProtocolKind::Discardable:
         return lookupConformance(type, proto);
       default:
         llvm_unreachable("no other conformances should be involved");

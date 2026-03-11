@@ -1195,7 +1195,20 @@ bool SILType::isMoveOnly(bool orWrapped) const {
   return ty->isNoncopyable();
 }
 
+bool SILType::isNonDiscardable() const {
+  CanType ty = getASTType();
 
+  // For storage with reference ownership, check the referent.
+  if (auto refStorage = ty->getAs<ReferenceStorageType>())
+    ty = refStorage->getReferentType()->getCanonicalType();
+
+  // SIL-specific types are always discardable.
+  if (isa<SILFunctionType>(ty) || isa<SILBlockStorageType>(ty) ||
+      isa<SILBoxType>(ty) || isa<SILPackType>(ty) || isa<SILTokenType>(ty))
+    return false;
+
+  return !ty->isDiscardable();
+}
 
 bool SILType::isValueTypeWithDeinit() const {
   // Do not look inside an aggregate type that has a user-deinit, for which
