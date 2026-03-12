@@ -505,6 +505,13 @@ public:
   /// a local variable.
   llvm::DenseMap<ValueDecl*, VarLoc> VarLocs;
 
+  /// DeinitFieldAddrs - In final root class deinits, noncopyable fields are
+  /// taken into stack slots in the prolog. Both user body and epilog access
+  /// these stack slots, allowing the MoveOnlyChecker to eliminate redundant
+  /// destroys (just like in ~Copyable struct deinits). Maps VarDecl -> marked
+  /// address (the mark_unresolved_non_copyable_value wrapping the alloc_stack).
+  llvm::DenseMap<VarDecl *, SILValue> DeinitFieldAddrs;
+
   /// A structure used for bookkeeping the on-demand formation and cleanup
   /// of an addressable representation for an immutable value binding.
   struct AddressableBuffer {

@@ -838,6 +838,24 @@ namespace {
       assert(base.getType().hasReferenceSemantics() &&
              "base for ref element component must be a reference type");
 
+      // In final root class deinits, noncopyable fields have pre-created
+      // marked addresses in DeinitFieldAddrs. Route user body access through
+      // the same address that the epilog uses, so the MoveOnlyChecker can
+      // correlate user consumes with epilog destroys.
+      auto deinitIt = SGF.DeinitFieldAddrs.find(Field);
+      if (deinitIt != SGF.DeinitFieldAddrs.end()) {
+        SILValue result = deinitIt->second;
+        // Still need access scope for non-let fields.
+        if (!IsNonAccessing && !Field->isLet()) {
+          if (auto enforcement = SGF.getDynamicEnforcement(Field)) {
+            result = enterAccessScope(SGF, loc, base, result, getTypeData(),
+                                      getAccessKind(), *enforcement,
+                                      takeActorIsolation());
+          }
+        }
+        return ManagedValue::forFormalAccessedAddress(result, getAccessKind());
+      }
+
       // Borrow the ref element addr using formal access. If we need the ref
       // element addr, we will load it in this expression.
       if (base.getType().isAddress()) {

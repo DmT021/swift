@@ -274,9 +274,16 @@ static void checkInvertibleConformanceCommon(DeclContext *dc,
         // A ~Discardable stored property may appear inside ~Copyable structs.
         // TODO: Allow ~Discardable properties in ~Copyable enums once deinitializers
         // and `discard self` are supported on them.
-        // TODO: Phase 3e: Allow ~Discardable properties in classes and actors.
         if (isa<StructDecl>(Nominal) && !Nominal->getDeclaredInterfaceType()->isCopyable())
           return false;
+        // A ~Discardable stored property may appear inside final root classes
+        // and actors (actors are implicitly final with no superclass).
+        // Inheritance makes partial consumption in deinit unsafe, so we
+        // restrict to final classes without a superclass.
+        if (auto *cd = dyn_cast<ClassDecl>(Nominal)) {
+          if (cd->isFinal() && !cd->hasSuperclass())
+            return false;
+        }
         break;
       }
 

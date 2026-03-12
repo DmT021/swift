@@ -135,6 +135,32 @@ void SILGenFunction::emitDestroyingDestructor(DestructorDecl *dd) {
     emitPreconditionCheckExpectedExecutor(Loc, *actor);
   }
 
+  // For final root classes, pre-create marked addresses for noncopyable fields.
+  // Both user body and epilog will share these addresses, allowing the
+  // MoveOnlyChecker to correlate user consumes with epilog destroys and
+  // remove redundant ones (matching the ~Copyable struct deinit pattern).
+  if (cd->isFinal() && !cd->hasSuperclass()) {
+    for (VarDecl *vd : cd->getStoredProperties()) {
+      auto fieldTy = vd->getTypeInContext();
+      if (!fieldTy || fieldTy->isCopyable())
+        continue;
+
+      const TypeLowering &ti = getTypeLowering(fieldTy);
+      if (ti.isTrivial())
+        continue;
+
+      // Create ref_element_addr on the function-argument self (guaranteed
+      // for the whole function), wrap in ConsumableAndAssignable mark.
+      SILValue addr = B.createRefElementAddr(
+          Loc, selfValue, vd, ti.getLoweredType().getAddressType());
+      addr = B.createMarkUnresolvedNonCopyableValueInst(
+          Loc, addr,
+          MarkUnresolvedNonCopyableValueInst::CheckKind::
+              ConsumableAndAssignable);
+      DeinitFieldAddrs[vd] = addr;
+    }
+  }
+
   // Create a basic block to jump to for the implicit destruction behavior
   // of releasing the elements and calling the superclass destructor.
   // We won't actually emit the block until we finish with the destructor body.
@@ -653,6 +679,24 @@ void SILGenFunction::emitClassMemberDestruction(ManagedValue selfValue,
     for (VarDecl *vd : cd->getStoredProperties()) {
       if (recursiveLinks.contains(vd))
         continue;
+
+      // For noncopyable fields in final root class deinits, use the
+      // pre-created marked address from DeinitFieldAddrs. Both user body
+      // and this epilog share the same marked address, allowing the
+      // MoveOnlyChecker to correlate user consumes with epilog destroys
+      // and remove redundant ones (matching the ~Copyable struct pattern).
+      auto it = DeinitFieldAddrs.find(vd);
+      if (it != DeinitFieldAddrs.end()) {
+        SILValue addr = it->second;
+        addr = B.createBeginAccess(
+            cleanupLoc, addr, SILAccessKind::Deinit,
+            SILAccessEnforcement::Static,
+            false /*noNestedConflict*/, false /*fromBuiltin*/);
+        B.createDestroyAddr(cleanupLoc, addr);
+        B.createEndAccess(cleanupLoc, addr, false /*is aborting*/);
+        continue;
+      }
+
       destroyClassMember(cleanupLoc, selfValue, vd);
     }
 

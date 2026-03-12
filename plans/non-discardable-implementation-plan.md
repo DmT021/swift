@@ -33,8 +33,9 @@ flowchart TD
 | Phase 3b — Sema: allow ~Discardable properties in ~Copyable | ✅ DONE | Allow ~Discardable properties in ~Copyable structs and enums |
 | Phase 3c — SIL pass: deinit body checking for ~Copyable | ✅ DONE | Stored ~Discardable properties in deinit (for ~Copyable types) |
 | Phase 3d — Sema: `discard self` for ~Discardable types | ✅ DONE | `discard self` works for ~Discardable types with trivial fields |
-| Phase 3e — Sema: allow ~Discardable properties in classes/actors | ⏳ PENDING | Allow ~Discardable properties in classes and actors |
-| Phase 3f — SIL pass: deinit body checking for classes/actors | ⏳ PENDING | Stored ~Discardable properties in deinit (for classes/actors) |
+| Phase 3e — Sema: allow ~Discardable/~Copyable properties in classes/actors | ⏳ PENDING | Allow in final root classes and actors |
+| Phase 3f — SILGen/MoveOnly: field consumption in class/actor deinits | ⏳ PENDING | ConsumableAndAssignable + drop_deinit for class self |
+| Phase 3g — NonDiscardableChecker: verify class/actor deinit handling | ⏳ PENDING | Verify existing checker handles class deinit patterns |
 | Phase 4 — Stdlib Optional/Result | ⏳ PENDING | Conditional conformance updates |
 | Phase 5 — IRGen/Mangling verification | ⏳ PENDING | Should auto-propagate from .def |
 | Phase 6 — SwiftCompilerSources | ⏳ PENDING | Swift-side SIL type updates |
@@ -460,25 +461,218 @@ A `~Discardable` struct/enum should not have a regular `deinit` — only `consum
 
 ---
 
-### Phase 3e — Sema: allow ~Discardable properties in classes/actors ⏳ PENDING
+### Phase 3e — Sema: allow ~Discardable/~Copyable properties in final root classes/actors ⏳ PENDING
 
-Extend the type checker relaxation from Phase 3b to allow `~Discardable` stored properties in `class` and `actor` types.
+Extend the type checker relaxation from Phase 3b to allow `~Discardable` stored properties in `class` and `actor` types. Also allow `~Copyable` stored properties in the same contexts (since `~Discardable` implies `~Copyable`).
 
-#### 3e.1 Required changes
+#### Background: Why `final` + no superclass
 
-1. **TypeCheckDecl.cpp:** Ensure the check allows `~Discardable` properties in classes and actors.
-2. **Inheritance Restrictions:** We need to carefully consider inheritance. If a class has a base class, allowing partial consumption in its `deinit` might be unsafe for the base class's `deinit`. We may need to restrict `~Discardable` properties to `final` classes without a superclass (both conditions should be true), or implement a safe way to handle them (e.g., requiring them to be wrapped in a `~Copyable` struct that handles the consumption).
+Inheritance makes partial consumption in `deinit` unsafe:
+- If `class B: A`, then `A.deinit` runs AFTER `B.deinit` (via the superclass destructor chain in [`emitDestroyingDestructor`](lib/SILGen/SILGenDestructor.cpp:157)). If `B.deinit` consumed a field declared in `A`, `A.deinit` would see invalid storage.
+- Subclass overrides of virtual methods could also observe partially-consumed parent state.
+
+By restricting to `final` classes without a superclass:
+- No subclass deinit runs before (no subclasses)
+- No superclass deinit runs after (no superclass)
+- Single point of teardown — safe for partial consumption
+
+Actors are implicitly `final` and cannot inherit from other actors — they always satisfy both conditions.
+
+#### 3e.1 Required change
+
+**File:** [`lib/Sema/TypeCheckInvertible.cpp:271`](lib/Sema/TypeCheckInvertible.cpp:271)
+
+Current code only allows `~Discardable` fields in `~Copyable` structs:
+
+```cpp
+case InvertibleProtocolKind::Discardable:
+  if (type->isDiscardable())
+    return false;
+  if (isa<StructDecl>(Nominal) && !Nominal->getDeclaredInterfaceType()->isCopyable())
+    return false;
+  break;
+```
+
+Add `final` root class/actor support:
+
+```cpp
+case InvertibleProtocolKind::Discardable:
+  if (type->isDiscardable())
+    return false;
+  // ~Discardable properties allowed in ~Copyable structs
+  if (isa<StructDecl>(Nominal) && !Nominal->getDeclaredInterfaceType()->isCopyable())
+    return false;
+  // ~Discardable properties allowed in final root classes and actors
+  if (auto *cd = dyn_cast<ClassDecl>(Nominal)) {
+    if (cd->isFinal() && !cd->hasSuperclass())
+      return false;
+  }
+  break;
+```
+
+#### 3e.2 Tests
+
+- `~Discardable` field in `final class` without superclass → allowed
+- `~Discardable` field in non-final class → error
+- `~Discardable` field in class with superclass → error
+- `~Discardable` field in actor → allowed (actors are implicitly final, no superclass)
 
 ---
 
-### Phase 3f — SIL pass: deinit body checking for classes/actors ⏳ PENDING
+### Phase 3f — SILGen/MoveOnly: field consumption in class/actor deinits ⏳ PENDING
 
-Implement the `deinit` body checking for classes and actors, similar to Phase 3c.
+Enable consuming `~Copyable` stored properties in deinit bodies of `final` root classes/actors. This uses the same mechanism the compiler already employs in every class deinit epilog — `ref_element_addr` → `begin_access [deinit]` → `destroy_addr` — but makes it available to user code.
 
-#### 3f.1 Required changes
+#### Background: How class field destruction works today
 
-1. **MoveOnlyChecker relaxation:** In `MoveOnlyAddressCheckerUtils.cpp`, the check that prevents consuming stored properties in class deinits needs to be relaxed, but *only* if it's safe (e.g., for final classes without base classes, or if we implement a safe mechanism).
-2. **NonDiscardableChecker:** Ensure the logic from Phase 3c correctly handles class and actor destructors.
+The compiler-generated epilog in [`destroyClassMember`](lib/SILGen/SILGenDestructor.cpp:477) destroys each class field on a **borrowed** self:
+
+```
+ref_element_addr %borrowed_self, #field
+begin_access [deinit]                         ← grants destructive access
+destroy_addr                                  ← takes ownership from borrowed ref
+end_access
+```
+
+`SILAccessKind::Deinit` is the mechanism that grants ownership-taking access to fields of a borrowed reference during teardown. The object is in its destroying destructor — no one else can observe the partial state.
+
+User code is blocked from doing the same by a **policy decision** in SILGen:
+
+1. [`SILGenLValue.cpp:866-875`](lib/SILGen/SILGenLValue.cpp:866): `RefElementComponent::project()` marks all class field accesses with `MarkUnresolvedNonCopyableValueInst::CheckKind::AssignableButNotConsumable`
+2. [`MoveOnlyAddressCheckerUtils.cpp:2466`](lib/SILOptimizer/Mandatory/MoveOnlyAddressCheckerUtils.cpp:2466): When the MoveOnlyChecker finds a consuming use on a non-`ConsumableAndAssignable` value, it falls through to...
+3. [`MoveOnlyDiagnostics.cpp:730`](lib/SILOptimizer/Mandatory/MoveOnlyDiagnostics.cpp:730): `emitGlobalOrClassFieldLoadedAndConsumed()` emits: "cannot consume noncopyable stored property of a class"
+
+#### How struct deinits solve this (the pattern to follow)
+
+For `~Copyable` struct deinits, [`emitSelfDeclForDestructor`](lib/SILGen/SILGenProlog.cpp:63) does:
+
+```cpp
+if (selfType.isMoveOnly() && !selfType.isAnyClassReferenceType()) {
+    SILValue addr = B.createAllocStack(selfDecl, selfValue->getType(), dv);
+    addr = B.createMarkUnresolvedNonCopyableValueInst(
+        selfDecl, addr, CheckKind::ConsumableAndAssignable);
+    B.createStore(selfDecl, selfValue, addr, StoreOwnershipQualifier::Init);
+    addr = B.createDropDeinit(selfDecl, addr);
+    selfValue = addr;
+}
+```
+
+Key elements:
+- Self is a **single tracked value** marked `ConsumableAndAssignable`
+- `drop_deinit` invalidates the user-defined deinit
+- All field accesses go through `struct_element_addr` on this one value
+- The MoveOnlyChecker's type-tree decomposition tracks per-field consumption
+- This gives **self-after-consume enforcement** for free: consuming field A + calling `foo()` (which needs all of self) = error
+
+Classes are explicitly excluded: `!selfType.isAnyClassReferenceType()`.
+
+#### 3f.1 `emitSelfDeclForDestructor` — include final root classes
+
+**File:** [`lib/SILGen/SILGenProlog.cpp:63`](lib/SILGen/SILGenProlog.cpp:63)
+
+Extend the condition to include final root class deinits:
+
+```cpp
+bool shouldTrackSelf = selfType.isMoveOnly() && !selfType.isAnyClassReferenceType();
+// Also track self for final root class deinits — enables field consumption
+if (!shouldTrackSelf && selfType.isAnyClassReferenceType()) {
+    if (auto *dd = dyn_cast<DestructorDecl>(F.getDeclContext())) {
+        if (auto *cd = dyn_cast<ClassDecl>(dd->getDeclContext())) {
+            if (cd->isFinal() && !cd->hasSuperclass())
+                shouldTrackSelf = true;
+        }
+    }
+}
+if (shouldTrackSelf) {
+    // alloc_stack + ConsumableAndAssignable + drop_deinit
+}
+```
+
+This makes class self a single tracked value. The MoveOnlyChecker will then allow per-field consumption and enforce self-after-consume rules:
+
+```swift
+final class Handle {
+    var token: Token  // ~Copyable
+    deinit {
+        takeConsuming(token) // partial consume of self
+        foo()                // ERROR: 'self' used after consume
+    }
+}
+```
+
+#### 3f.2 `RefElementComponent::project()` — use `ConsumableAndAssignable` in deinit
+
+**File:** [`lib/SILGen/SILGenLValue.cpp:866`](lib/SILGen/SILGenLValue.cpp:866)
+
+When self is tracked as `ConsumableAndAssignable` (from 3f.1), field accesses via `ref_element_addr` should also be `ConsumableAndAssignable` in deinit context:
+
+```cpp
+if (result->getType().isMoveOnly()) {
+    auto checkKind = MarkUnresolvedNonCopyableValueInst::CheckKind::
+        AssignableButNotConsumable;
+    if (isReadAccess(getAccessKind())) {
+        checkKind = MarkUnresolvedNonCopyableValueInst::CheckKind::NoConsumeOrAssign;
+    } else if (SGF.isInFinalRootClassDeinit()) {
+        checkKind = MarkUnresolvedNonCopyableValueInst::CheckKind::
+            ConsumableAndAssignable;
+    }
+    result = SGF.B.createMarkUnresolvedNonCopyableValueInst(loc, result, checkKind);
+}
+```
+
+#### 3f.3 `emitDestroyingDestructor` — use `emitMoveOnlyMemberDestruction`-style epilog
+
+**File:** [`lib/SILGen/SILGenDestructor.cpp:103`](lib/SILGen/SILGenDestructor.cpp:103)
+
+For final root class deinits, replace the epilog path (lines 190–223) to use the struct deinit pattern:
+
+Instead of:
+```
+borrowedValue = B.borrowObjectRValue(...)
+emitClassMemberDestruction(borrowedValue, cd, cleanupLoc)  // unconditional destroy all
+```
+
+Use a pattern analogous to [`emitMoveOnlyMemberDestruction`](lib/SILGen/SILGenDestructor.cpp:672):
+- `drop_deinit` on self (already done in prolog via 3f.1)
+- Per-field `ref_element_addr` → `begin_access [deinit]` → `destroy_addr`
+- The MoveOnlyChecker canonicalizes: user-consumed fields become dead, remaining fields keep their `destroy_addr`
+
+#### 3f.4 Self-after-consume enforcement (free)
+
+Once self is a single `ConsumableAndAssignable` tracked value, the MoveOnlyChecker's existing `sil_movechecking_value_used_after_consume` diagnostic handles this automatically:
+
+```swift
+final class Handle: ~Copyable {
+    var token: Token
+    deinit {
+        takeConsuming(token) // partial consume of self via ref_element_addr
+        foo()                // ERROR: 'self' used after consume
+    }
+    func foo() {}
+}
+```
+
+The MoveOnlyChecker sees `takeConsuming(token)` as a partial consume of self at the type-tree level for the `token` field, then `foo()` as a use of the whole self.
+
+#### 3f.5 Tests
+
+- `final class` deinit consuming `~Copyable` field → OK
+- `final class` deinit NOT consuming `~Discardable` field → NonDiscardableChecker error
+- `final class` deinit consuming field then calling method → MoveOnlyChecker error
+- actor deinit consuming `~Discardable` field → OK
+
+---
+
+### Phase 3g — NonDiscardableChecker: verify class/actor deinit handling ⏳ PENDING
+
+#### 3g.1 Verification
+
+The `NonDiscardableChecker` already handles class deinit patterns:
+- [`isDeinitFunction()`](lib/SILOptimizer/Mandatory/NonDiscardableChecker.cpp:276) detects deinit context via `DestructorDecl`
+- [`getDiagInfo()`](lib/SILOptimizer/Mandatory/NonDiscardableChecker.cpp:256) resolves `RefElementAddrInst` to property names
+- [`emitDiagnostic()`](lib/SILOptimizer/Mandatory/NonDiscardableChecker.cpp:419) uses `sil_nondiscardable_unconsumed_in_deinit` for properties in deinit context
+
+After Phase 3f, the compiler-generated epilog `destroy_addr` on un-consumed `~Discardable` fields will be detected by the checker and reported. No changes expected, but needs verification.
 
 ---
 

@@ -168,8 +168,8 @@ internal func != (lhs: Builtin.RawPointer, rhs: Builtin.RawPointer) -> Bool {
 @_alwaysEmitIntoClient
 @_transparent
 public func == (
-  t0: (any (~Copyable & ~Escapable).Type)?,
-  t1: (any (~Copyable & ~Escapable).Type)?
+  t0: (any (~Copyable & ~Escapable & ~Discardable).Type)?,
+  t1: (any (~Copyable & ~Escapable & ~Discardable).Type)?
 ) -> Bool {
   switch (t0, t1) {
   case (.none, .none):
@@ -199,8 +199,8 @@ public func == (
 @_alwaysEmitIntoClient
 @_transparent
 public func != (
-  t0: (any (~Copyable & ~Escapable).Type)?,
-  t1: (any (~Copyable & ~Escapable).Type)?
+  t0: (any (~Copyable & ~Escapable & ~Discardable).Type)?,
+  t1: (any (~Copyable & ~Escapable & ~Discardable).Type)?
 ) -> Bool {
   !(t0 == t1)
 }
@@ -794,7 +794,7 @@ func _COWBufferForReading<T: AnyObject>(_ object: T) -> T {
 @_transparent
 @_preInverseGenerics
 public // @testable
-func _isPOD<T: ~Copyable & ~Escapable>(_ type: T.Type) -> Bool {
+func _isPOD<T: ~Copyable & ~Escapable & ~Discardable>(_ type: T.Type) -> Bool {
   Bool(Builtin.ispod(type))
 }
 
@@ -980,7 +980,7 @@ func _trueAfterDiagnostics() -> Builtin.Int1 {
 /// - Returns: The dynamic type, which is a metatype instance.
 @_alwaysEmitIntoClient
 @_semantics("typechecker.type(of:)")
-public func type<T: ~Copyable & ~Escapable, Metatype>(
+public func type<T: ~Copyable & ~Escapable & ~Discardable, Metatype>(
   of value: borrowing T
 ) -> Metatype {
   // This implementation is never used, since calls to `Swift.type(of:)` are

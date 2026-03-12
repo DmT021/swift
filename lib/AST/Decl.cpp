@@ -3527,7 +3527,33 @@ bool AbstractStorageDecl::requiresOpaqueSetter() const {
   if (getParsedAccessor(AccessorKind::Mutate)) {
     return false;
   }
-  if (!getValueInterfaceType()->isDiscardable()) {
+  auto ty = getValueInterfaceType();
+
+  // isDiscardable() internally uses checkConformance() which asserts no type
+  // parameters. For interface types with type parameters (generic contexts,
+  // .swiftinterface files), use checkConformanceWithoutContext which returns
+  // optional and gracefully handles parametric types via lookupConformance.
+  if (ty->hasTypeParameter() || ty->hasUnboundGenericType()) {
+    auto &ctx = getASTContext();
+    auto *discardableProto = ctx.getProtocol(
+        getKnownProtocolKind(InvertibleProtocolKind::Discardable));
+    if (!discardableProto) {
+      // Discardable protocol not loaded yet; Discardable is on-by-default
+      // so conservatively assume the type is discardable → require setter.
+      return true;
+    }
+    auto result = checkConformanceWithoutContext(ty, discardableProto,
+                                                /*allowMissing=*/false);
+    if (!result.has_value()) {
+      // Indeterminate: Discardable is on-by-default, assume discardable.
+      return true;
+    }
+    // Has a valid conformance → discardable → needs setter.
+    // Invalid conformance → non-discardable → no setter.
+    return (bool)*result;
+  }
+
+  if (!ty->isDiscardable()) {
     return false;
   }
   return true;
