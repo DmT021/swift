@@ -3,11 +3,11 @@
 // REQUIRES: swift_feature_NonDiscardableTypes
 // REQUIRES: swift_feature_MoveOnlyEnumDeinits
 
-// Tests for `discard self` interaction with ~Discardable types.
+// Tests for ~Discardable types: consuming methods don't need `discard self`.
 //
-// These tests focus on SIL-level checking:
-// - NonDiscardableChecker: unconsumed locals, unconsumed deinit properties
-// - discard self with DropDeinitInst skip
+// `~Discardable` types cannot have a deinit, so `discard self` is redundant —
+// the consuming method body itself is the consumption. The compiler will still
+// accept `discard self` in ~Discardable types (it's allowed but not required).
 //
 // Sema-level tests (deinit ban on ~Discardable types) are in
 // test/Sema/nondiscardable_smoke.swift.
@@ -19,11 +19,11 @@
 public struct TaskToken: ~Discardable {
   var id: Int
   public init(id: Int) { self.id = id }
-  public consuming func complete() { discard self }
+  public consuming func complete() {} // No discard self needed
 }
 
 // ============================================================================
-// MARK: - OK: ~Discardable type with trivial fields using discard self
+// MARK: - OK: ~Discardable type with trivial fields — consuming method
 // ============================================================================
 
 struct TrivialLinearValue: ~Discardable {
@@ -32,7 +32,7 @@ struct TrivialLinearValue: ~Discardable {
   init(x: Int) { self.x = x }
 
   consuming func finish() {
-    discard self // OK: all fields are trivial, self is consumed via discard.
+    // OK: consuming method consumes self — no discard self needed.
   }
 }
 
@@ -47,7 +47,7 @@ struct TrivialPair: ~Discardable {
   init(a: Int, b: Bool) { self.a = a; self.b = b }
 
   consuming func done() {
-    discard self // OK: all fields trivial.
+    // OK: consuming method — no discard self needed.
   }
 }
 

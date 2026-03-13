@@ -3529,10 +3529,10 @@ bool AbstractStorageDecl::requiresOpaqueSetter() const {
   }
   auto ty = getValueInterfaceType();
 
-  // isDiscardable() internally uses checkConformance() which asserts no type
-  // parameters. For interface types with type parameters (generic contexts,
-  // .swiftinterface files), use checkConformanceWithoutContext which returns
-  // optional and gracefully handles parametric types via lookupConformance.
+  // For types involving type parameters, we need the generic signature to
+  // correctly determine Discardable conformance. A type parameter T: ~Discardable
+  // must NOT get a setter, because the setter would implicitly destroy the old
+  // value, violating the explicit-consumption requirement.
   if (ty->hasTypeParameter() || ty->hasUnboundGenericType()) {
     auto &ctx = getASTContext();
     auto *discardableProto = ctx.getProtocol(
@@ -3542,6 +3542,16 @@ bool AbstractStorageDecl::requiresOpaqueSetter() const {
       // so conservatively assume the type is discardable → require setter.
       return true;
     }
+
+    // Use the generic signature from the DeclContext when available.
+    // GenericSignature::requiresProtocol definitively knows whether
+    // T conforms to Discardable based on the declared constraints.
+    if (auto genericSig = getDeclContext()->getGenericSignatureOfContext()) {
+      return genericSig->requiresProtocol(ty, discardableProto);
+    }
+
+    // Fallback for contexts without a generic signature: use
+    // checkConformanceWithoutContext which handles lookupConformance.
     auto result = checkConformanceWithoutContext(ty, discardableProto,
                                                 /*allowMissing=*/false);
     if (!result.has_value()) {

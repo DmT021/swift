@@ -3038,6 +3038,47 @@ public:
     }
   }
 
+  /// Diagnose types that have ~Discardable stored properties but no explicit
+  /// deinit. Without a deinit, the implicit destruction would silently discard
+  /// non-discardable fields.
+  void checkNonDiscardableFieldsNeedDeinit(NominalTypeDecl *NTD) {
+    if (!Ctx.LangOpts.hasFeature(Feature::NonDiscardableTypes))
+      return;
+
+    // If the type itself is ~Discardable, it can't have a deinit at all
+    // (that's banned separately), so this check doesn't apply.
+    if (!NTD->canBeDiscardable())
+      return;
+
+    // Check whether the type has an explicit deinit.
+    bool hasExplicitDeinit = false;
+    if (auto *classDecl = dyn_cast<ClassDecl>(NTD)) {
+      hasExplicitDeinit = !classDecl->getDestructor()->isImplicit();
+    } else {
+      // For structs/enums, getValueTypeDestructor() returns null if no
+      // explicit deinit was declared.
+      hasExplicitDeinit = NTD->getValueTypeDestructor() != nullptr;
+    }
+
+    if (hasExplicitDeinit)
+      return;
+
+    // Check stored properties for ~Discardable fields.
+    for (auto *member : NTD->getMembers()) {
+      auto *var = dyn_cast<VarDecl>(member);
+      if (!var || !var->hasStorage())
+        continue;
+      auto fieldTy = var->getTypeInContext();
+      if (!fieldTy)
+        continue;
+      if (!fieldTy->isDiscardable()) {
+        NTD->diagnose(diag::type_with_nondiscardable_field_needs_deinit,
+                      NTD->getName(),
+                      var->getBaseIdentifier().str());
+      }
+    }
+  }
+
   void visitEnumDecl(EnumDecl *ED) {
     checkUnsupportedNestedType(ED);
 
@@ -3160,6 +3201,8 @@ public:
     TypeChecker::checkDeclCircularity(SD);
 
     TypeChecker::checkConformancesInContext(SD);
+
+    checkNonDiscardableFieldsNeedDeinit(SD);
   }
 
   /// Check whether the given properties can be @NSManaged in this class.
@@ -3454,6 +3497,8 @@ public:
     maybeDiagnoseClassWithoutInitializers(CD);
 
     diagnoseInverseOnClass(CD);
+
+    checkNonDiscardableFieldsNeedDeinit(CD);
   }
 
   void visitProtocolDecl(ProtocolDecl *PD) {

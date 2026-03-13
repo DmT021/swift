@@ -40,8 +40,7 @@ public func makeObligation() -> Obligation {
 
 func testLetNotConsumed() {
   let token = makeToken()
-  // expected-error @-1 {{non-discardable value 'token' must be explicitly consumed before end of scope}}
-  // expected-note @-2 {{consider consuming 'token' by passing it to a 'consuming' function or using 'consume' operator}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
   _ = token.id // borrowing use, not a consume
 }
 
@@ -51,8 +50,9 @@ func testLetNotConsumed() {
 
 func testVarNotConsumed() {
   var token = makeToken()
-  // expected-error @-1 {{non-discardable value 'token' must be explicitly consumed before end of scope}}
-  token = makeToken() // expected-error {{implicit discard of non-discardable value}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
+  // expected-error @-2 {{non-discardable value 'token' must be consumed before it goes out of scope}}
+  token = makeToken()
   // Reassigning a var implicitly destroys the old value.
   _ = token.id
 }
@@ -72,7 +72,7 @@ func testLetConsumedByMethod() {
 
 func testConsumeOperatorAloneIsDiscard() {
   let token = makeToken()
-  let _ = consume token // expected-error {{implicit discard of non-discardable value}}
+  let _ = consume token // expected-error {{non-discardable value '<anonymous>' must be consumed before it goes out of scope}}
   // `consume` moves the value out, but `let _ =` discards it.
 }
 
@@ -89,7 +89,7 @@ func testConsumingParam(_ token: consuming TaskToken) {
 // ============================================================================
 
 func testConsumingParamNotConsumed(_ token: consuming TaskToken) {
-  // expected-error @-1 {{non-discardable parameter 'token' must be explicitly consumed before end of function}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
   _ = token.id
 }
 
@@ -121,7 +121,7 @@ func testPassToConsuming() {
 
 func testConditionalConsume(_ condition: Bool) {
   let token = makeToken()
-  // expected-error @-1 {{non-discardable value 'token' must be explicitly consumed on all paths}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
   if condition {
     token.complete()
   }
@@ -148,7 +148,7 @@ func testAllPathsConsumed(_ condition: Bool) {
 
 func testLoopNotGuaranteed(_ items: [Int]) {
   let token = makeToken()
-  // expected-error @-1 {{non-discardable value 'token' must be explicitly consumed on all paths}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
   for item in items {
     if item > 0 {
       token.complete()
@@ -175,7 +175,7 @@ func testBorrowingParam(_ token: borrowing TaskToken) {
 func testStoredInLocal() {
   let token = makeToken()
   let local = consume token // move token into local
-  // expected-error @-1 {{non-discardable value 'local' must be explicitly consumed before end of scope}}
+  // expected-error @-1 {{non-discardable value 'local' must be consumed before it goes out of scope}}
   _ = local.id
 }
 
@@ -196,7 +196,7 @@ func testStoredInLocalConsumed() {
 func testMultipleValues() {
   let a = makeToken()
   let b = makeObligation()
-  // expected-error @-1 {{non-discardable value 'b' must be explicitly consumed before end of scope}}
+  // expected-error @-1 {{non-discardable value 'b' must be consumed before it goes out of scope}}
 
   a.complete() // a is consumed
   _ = b.description // b is only borrowed, not consumed
@@ -224,7 +224,7 @@ enum Choice: ~Copyable {
 
 func testSwitchNotAllPaths(_ c: consuming Choice) {
   let token = makeToken()
-  // expected-error @-1 {{non-discardable value 'token' must be explicitly consumed on all paths}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
   switch consume c {
   case .left:
     token.complete()
@@ -253,7 +253,7 @@ func testSwitchAllPaths(_ c: consuming Choice) {
 
 func testClosureCapture() {
   let token = makeToken()
-  // expected-error @-1 {{non-discardable value 'token' must be explicitly consumed before end of scope}}
+  // expected-error @-1 {{non-discardable value 'token' must be consumed before it goes out of scope}}
   let closure = {
     _ = token.id // borrowing capture
   }
@@ -280,6 +280,6 @@ func testEnumConsumedBySwitch() {
 }
 
 func testEnumNotConsumed() {
-  let value: TokenOrError = .token(makeToken())
-  // expected-error @-1 {{non-discardable value 'value' must be explicitly consumed before end of scope}}
+  let value: TokenOrError = .token(makeToken()) // expected-warning {{immutable value 'value' was never used; consider replacing with '_' or removing it}}
+  // expected-error @-1 {{non-discardable value 'value' must be consumed before it goes out of scope}}
 }

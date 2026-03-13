@@ -5021,6 +5021,9 @@ ERROR(value_of_metatype_type,none,
 ERROR(nondiscardable_property_cannot_have_observers, none,
       "non-discardable property '%0' cannot have 'willSet' or 'didSet' observers",
       (StringRef))
+ERROR(type_with_nondiscardable_field_needs_deinit, none,
+      "type %0 with non-discardable stored property '%1' must have an explicit 'deinit'",
+      (DeclName, StringRef))
 
 NOTE(add_parens_to_type,none,
      "add arguments after the type to construct a value of the type", ())

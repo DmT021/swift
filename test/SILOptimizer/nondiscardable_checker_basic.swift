@@ -2,7 +2,7 @@
 
 struct Token: ~Discardable {
   var x = 0
-  consuming func complete() {} // expected-error {{non-discardable value 'self' must be consumed before it goes out of scope}}
+  consuming func complete() {}
   consuming func complete2() {
     self.complete()
   }
@@ -16,6 +16,51 @@ struct Token: ~Discardable {
     self.complete()
     self = Token()
   }
+}
+
+struct ND: ~Discardable {
+  var t = Token()
+
+  consuming func complete() {} // expected-error {{non-discardable value 't' must be consumed before it goes out of scope}}
+  consuming func complete2() {
+    self.complete()
+  }
+  consuming func complete3() {
+    t.complete()
+  }
+}
+
+struct NC: ~Copyable {
+  var t = Token()
+
+  consuming func complete() {} // OK — NC has a deinit that handles field consumption
+  consuming func complete2() {
+    self.complete()
+  }
+
+  deinit {
+    t.complete()
+  }
+}
+
+struct NC2: ~Copyable {
+  var t = Token()
+
+  deinit {} // expected-error {{non-discardable stored property 't' must be consumed before deinit exits}}
+}
+
+struct NC3: ~Copyable {
+  var t = Token()
+
+  deinit {
+    t.complete()
+  }
+}
+
+
+func testNC() {
+  let nc = NC()
+  _ = nc // OK — NC has a proper deinit
 }
 
 func consume(_ t: consuming Token) {} // expected-error {{non-discardable value 't' must be consumed before it goes out of scope}}

@@ -3,9 +3,7 @@
 
 struct Resource: ~Discardable {
   var handle: Int
-  consuming func close() {
-    discard self
-  }
+  consuming func close() {}
 }
 
 // CHECK-LABEL: sil hidden [ossa] @$s{{.*}}7MyClassCfd
